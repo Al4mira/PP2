@@ -1,249 +1,210 @@
-import pygame 
-import random
+#Imports
+import pygame, sys
+from pygame.locals import *
+import random, time
+
+#Initialzing 
 pygame.init()
 
-
-
-W, H = 1200, 650
+#Setting up FPS 
 FPS = 60
+FramePerSec = pygame.time.Clock()
 
-screen = pygame.display.set_mode((W, H))
-clock = pygame.time.Clock()
-done = False
-bg = (0, 0, 0)
+#Creating colors
+BLUE  = (0, 0, 255)
+RED   = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
 
-#paddle
-paddleW = 300 #150
-paddleH = 25
-paddleSpeed = 20
-paddle = pygame.Rect(W // 2 - paddleW // 2, H - paddleH - 30, paddleW, paddleH)
+#Other Variables for use in the program
+SCREEN_WIDTH = 400
+SCREEN_HEIGHT = 600
+SPEED = 5
+SCORE = 0
+COIN_SCORE = 0
+# Count the number of coins (not dependent on its weight)
+COIN_COUNT = 0
+N = 5
 
+#List with coin's pictures
+coins_img = ["Coin2.png", "Coin3.png", "Coin.png"]
 
-#Ball
-ballRadius = 20
-ballSpeed = 6
-ball_rect = int(ballRadius * 2 ** 0.5)
-ball = pygame.Rect(random.randrange(ball_rect, W - ball_rect), H // 2, ball_rect, ball_rect)
-dx, dy = 1, -1
-color_index = 0
-color_options = [{'color':'red', 'rgb':(255, 0, 0)}, {'color':'green', 'rgb':(0, 255, 0)}, {'color':'blue', 'rgb':(0, 0, 255)}]
+#Setting up Fonts
+font = pygame.font.SysFont("Verdana", 60)
+font_small = pygame.font.SysFont("Verdana", 20)
+game_over = font.render("Game Over", True, BLACK)
 
-#Game score
-game_score = 0
-game_score_fonts = pygame.font.SysFont('comicsansms', 40)
-game_score_text = game_score_fonts.render(f'Your game score is: {game_score}', True, (0, 0, 0))
-game_score_rect = game_score_text.get_rect()
-game_score_rect.center = (210, 20)
+background = pygame.image.load("AnimatedStreet.png")
+pygame.mixer.music.load('background.wav')
+pygame.mixer.music.play(-1)
 
-#Catching sound
-collision_sound = pygame.mixer.Sound('catch.mp3')
-
-def detect_collision(dx, dy, ball, rect):
-    if dx > 0:
-        delta_x = ball.right - rect.left
-    else:
-        delta_x = rect.right - ball.left
-    if dy > 0:
-        delta_y = ball.bottom - rect.top
-    else:
-        delta_y = rect.bottom - ball.top
-
-    if abs(delta_x - delta_y) < 10:
-        dx, dy = -dx, -dy
-    if delta_x > delta_y:
-        dy = -dy
-    elif delta_y > delta_x:
-        dx = -dx
-    return dx, dy
+print
+#Create a white screen 
+DISPLAYSURF = pygame.display.set_mode((400,600))
+DISPLAYSURF.fill(WHITE)
+pygame.display.set_caption("Game")
 
 
-#block settings
-block_list = [pygame.Rect(10 + 120 * i, 50 + 70 * j,
-        100, 50) for i in range(10) for j in range (3)]
-color_list = [(random.randrange(0, 255), 
-    random.randrange(0, 255),  random.randrange(0, 255))
-              for i in range(10) for j in range(4)] 
-# random number of unbreakable bricks 3-7
-unbreakable_bricks_count = random.randrange(1, 7)
-# random number of bonus bricks less or equal 6
-bonus_bricks_count = random.randrange(1, 6)
-# 0 - breakable, 1 - unbreakable, 2 - bonus
-type_list = [1] * unbreakable_bricks_count + [2] * bonus_bricks_count + [0] * (len(block_list) - unbreakable_bricks_count - bonus_bricks_count)
-random.shuffle(type_list)
-#print(type_list)
-# print(block_list)
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self):
+        global SPEED
+        super().__init__() 
+        self.image = pygame.image.load("Enemy.png")
+        self.rect = self.image.get_rect()
+        self.rect.center = (random.randint(40,SCREEN_WIDTH-40), 0)
+        self.speed = SPEED
+         # flag for increasing speed
+        self.speed_increased = False
 
-
-
-
-#Menu
-paused = False
-settings_open = False
-
-def pause_screen():
-    global pausetext, pausetextRect
-    global settings_button_text, settings_button_rect
-    global paused, settings_open
-    if not paused:
-        paused = True
-        screen.blit(pausetext, pausetextRect)  # Show pause text
-    else:
-        paused = False
-
-def settings_menu():
-    global settings_open, color_index
-    settings_open = True
-    while settings_open:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP:
-                    color_index = (color_index - 1) % len(color_options)
-                elif event.key == pygame.K_DOWN:
-                    color_index = (color_index + 1) % len(color_options)
-                elif event.key == pygame.K_RETURN:
-                    settings_open = False
-
-        screen.fill(bg)
-        
-        # Display "Settings" label
-        settings_label_font = pygame.font.SysFont('comicsansms', 40)
-        settings_label_text = settings_label_font.render('Settings Menu', True, (255, 255, 255))
-        settings_label_rect = settings_label_text.get_rect()
-        settings_label_rect.center = (W // 2, 50)
-        screen.blit(settings_label_text, settings_label_rect)
-
-        # Display color options
-        settings_font = pygame.font.SysFont('comicsansms', 30)
-        settings_text = settings_label_font.render('Color options:', True, (255, 255, 255))
-        settings_rect = settings_text.get_rect()
-        settings_rect.center = (W // 2, 120)
-        screen.blit(settings_text, settings_rect)
-        for i, color in enumerate(color_options):
-            pygame.draw.circle(screen, color['rgb'], (W // 2, 200 + 50 * i), 20)
-            if i == color_index:
-                pygame.draw.circle(screen, (255, 255, 255), (W // 2, 200 + 50 * i), 25, 2)  # Highlight selected color
-
-        # Display instructions
-        instructions_font = pygame.font.SysFont('comicsansms', 30)
-        instructions_text = instructions_font.render('Use UP/DOWN arrows to choose color. Press ENTER to apply.', True, (255, 255, 255))
-        screen.blit(instructions_text, (W // 2 - instructions_text.get_width() // 2, H - 100))
-        
-        pygame.display.flip()
-        clock.tick(FPS)
-
-
-#Game over Screen
-losefont = pygame.font.SysFont('comicsansms', 40)
-losetext = losefont.render('Game Over', True, (255, 255, 255))
-losetextRect = losetext.get_rect()
-losetextRect.center = (W // 2, H // 2)
-
-#Win Screen
-winfont = pygame.font.SysFont('comicsansms', 40)
-wintext = winfont.render('You win yay', True, (0, 0, 0))
-wintextRect = wintext.get_rect()
-wintextRect.center = (W // 2, H // 2)
-
-#Pause Screen
-pausefont = pygame.font.SysFont('comicsansms', 40)
-pausetext = pausefont.render('Pause', True, (255, 255, 255))
-pausetextRect = losetext.get_rect()
-pausetextRect.center = (W // 2, H // 2)
-
-#Adding an event to increase speed (every 3 seconds)
-INC_SPEED = pygame.USEREVENT + 1
-pygame.time.set_timer(INC_SPEED, 3000)
-#Adding an event to shred paddle (every 5 seconds)
-SHRINK_PADDLE = pygame.USEREVENT + 2
-pygame.time.set_timer(SHRINK_PADDLE, 5000)
-
-while not done:
-    for event in pygame.event.get():
-        if event.type == INC_SPEED:
-            ballSpeed += 0.5
-            #print(ballSpeed)
-        if event.type == SHRINK_PADDLE:
-            paddleW -= 20
-            paddle.width = paddleW  
-            #print(paddleW)
-        if event.type == pygame.QUIT:
-            done = True
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                pause_screen()
-
-            elif event.key == pygame.K_s:
-                settings_menu()
-
-    screen.fill(bg)
+    def move(self):
+        global SCORE
+        self.change_speed()
+        self.rect.move_ip(0,self.speed)
+        if (self.rect.bottom > 600):
+            SCORE += 1
+            self.rect.top = 0
+            self.rect.center = (random.randint(40, SCREEN_WIDTH - 40), 0)
     
-    if not paused:
-        # print(next(enumerate(block_list)))
-        [pygame.draw.rect(screen, color_list[color], block)
-        for color, block in enumerate (block_list)] 
+    def change_speed(self):
+        global COIN_COUNT, N
+        #Every N coins speed will increase
+        if COIN_COUNT % N == 0 and COIN_COUNT != 0 and not self.speed_increased:
+            self.speed += 0.5
+            self.speed_increased = True
+            #print(COIN_COUNT, self.speed)
+        elif COIN_COUNT % N != 0:
+            self.speed_increased = False
+
+
+
+class Player(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__() 
+        self.image = pygame.image.load("Player.png")
+        self.rect = self.image.get_rect()
+        self.rect.center = (160, 520)
+       
+    def move(self):
+        pressed_keys = pygame.key.get_pressed()
         
-        pygame.draw.rect(screen, pygame.Color(255, 255, 255), paddle)
-        pygame.draw.circle(screen, pygame.Color(color_options[color_index]['rgb']), ball.center, ballRadius)
-        # print(next(enumerate (block_list)))
+        if self.rect.left > 0:
+              if pressed_keys[K_LEFT]:
+                  self.rect.move_ip(-5, 0)
+        if self.rect.right < SCREEN_WIDTH:        
+              if pressed_keys[K_RIGHT]:
+                  self.rect.move_ip(5, 0)
 
-        #Ball movement
-        ball.x += ballSpeed * dx
-        ball.y += ballSpeed * dy
 
-        #Collision left 
-        if ball.centerx < ballRadius or ball.centerx > W - ballRadius:
-            dx = -dx
-        #Collision top
-        if ball.centery < ballRadius + 50: 
-            dy = -dy
-        #Collision with paddle
-        if ball.colliderect(paddle) and dy > 0:
-            dx, dy = detect_collision(dx, dy, ball, paddle)
-
-        #Collision blocks
-        hitIndex = ball.collidelist(block_list)
-
-        if hitIndex != -1:
-            if(type_list[hitIndex] == 0 or type_list[hitIndex] == 2):
-                hitRect = block_list.pop(hitIndex)
-                hitColor = color_list.pop(hitIndex)
-                dx, dy = detect_collision(dx, dy, ball, hitRect)
-                if(type_list[hitIndex] == 0):
-                    game_score += 1
-                elif(type_list[hitIndex] == 2):
-                    if game_score > 0:
-                        game_score = game_score * 2
-                    else:
-                        game_score += 5
-            else:
-                type_list[hitIndex] = 0
-                hitRect = block_list[hitIndex]
-                dx, dy = detect_collision(dx, dy, ball, hitRect)
-            collision_sound.play()
-            
-        #Game score
-        game_score_text = game_score_fonts.render(f'Your game score is: {game_score}', True, (255, 255, 255))
-        screen.blit(game_score_text, game_score_rect)
+class Coin(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__() 
+        global coins, all_sprites
         
-        #Win/lose screens
-        if ball.bottom > H:
-            screen.fill((0, 0, 0))
-            screen.blit(losetext, losetextRect)
-        elif not len(block_list):
-            screen.fill((255,255, 255))
-            screen.blit(wintext, wintextRect)
+        self.weight = random.randint(1,3)
+        self.image = pygame.image.load(coins_img[self.weight-1])
+        self.rect = self.image.get_rect()
+       
+        while pygame.sprite.spritecollideany(self, enemies):
+            self.rect.center = (random.randint(40,SCREEN_WIDTH-40), 0)
+           
+        while pygame.sprite.spritecollideany(self, coins):
+            self.rect.center = (random.randint(40,SCREEN_WIDTH-40), 0)
+        
+        self.coin_sound = pygame.mixer.Sound('coin.wav')
 
-        #Paddle Control
-        key = pygame.key.get_pressed()
-        if key[pygame.K_LEFT] and paddle.left > 0:
-            paddle.left -= paddleSpeed
-        if key[pygame.K_RIGHT] and paddle.right < W:
-            paddle.right += paddleSpeed
+    def move(self):
+        self.rect.move_ip(0,SPEED)
+        if (self.rect.bottom > 600):
+            self.rect.top = 0
+            self.rect.center = (random.randint(40, SCREEN_WIDTH - 40), 0)
 
-    else:
-        screen.blit(pausetext, pausetextRect)
-    pygame.display.flip()
-    clock.tick(FPS)
+    def check_collisions(self):
+        global all_sprites
+        if pygame.sprite.spritecollideany(self, enemies):
+            self.kill()
+
+    def update(self):
+        global COIN_SCORE, COIN_COUNT
+        if pygame.sprite.collide_rect(self, P1):
+            COIN_SCORE += self.weight
+            COIN_COUNT += 1
+            self.coin_sound.play()  # Play the coin sound
+            self.kill()    
+        self.check_collisions()
+#Setting up Sprites        
+P1 = Player()
+E1 = Enemy()
+
+#Creating Sprites Groups
+enemies = pygame.sprite.Group()
+enemies.add(E1)
+
+coins = pygame.sprite.Group()
+
+all_sprites = pygame.sprite.Group()
+all_sprites.add(P1)
+all_sprites.add(E1)
+
+
+
+#Adding Coin event
+ADD_COIN = pygame.USEREVENT + 2
+pygame.time.set_timer(ADD_COIN,2000)
+
+#Function to generate coins
+#It depends on the number of coins so it won't be too many of them on the road
+def coin_generator():
+    global coins, all_sprites
+    if len(coins) < 3:
+        for i in range(random.randint(1,3)):
+            coin = Coin()
+            coins.add(coin)
+            all_sprites.add(coin)
+    elif len(coins) == 3:
+        coin = Coin()
+        coins.add(coin)
+        all_sprites.add(coin)
+
+#Game Loop
+while True:
+      
+    #Cycles through all events occuring  
+    for event in pygame.event.get():
+        if event.type == ADD_COIN:
+            coin_generator()
+        if event.type == QUIT:
+            pygame.quit()
+            sys.exit()
+
+    DISPLAYSURF.blit(background, (0,0))
+    scores = font_small.render(str(SCORE), True, BLACK)
+    coin_scores = font_small.render(str(COIN_SCORE), True, BLACK)
+    DISPLAYSURF.blit(scores, (10,10))
+    DISPLAYSURF.blit(coin_scores, (SCREEN_WIDTH - 35,10))
+
+    #Moves and Re-draws all Sprites
+    for entity in all_sprites:
+        entity.move()
+        DISPLAYSURF.blit(entity.image, entity.rect)
+        
+
+    #To be run if collision occurs between Player and Enemy
+    if pygame.sprite.spritecollideany(P1, enemies):
+          pygame.mixer.Sound('crash.wav').play()
+          time.sleep(1)
+                   
+          DISPLAYSURF.fill(RED)
+          DISPLAYSURF.blit(game_over, (30,250))
+          
+          pygame.display.update()
+          for entity in all_sprites:
+                entity.kill() 
+          time.sleep(2)
+          pygame.quit()
+          sys.exit()      
+
+    coins.update()
+
+    pygame.display.update()
+    FramePerSec.tick(FPS)
